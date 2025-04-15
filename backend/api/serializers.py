@@ -39,11 +39,14 @@ class ItemSerializer(serializers.ModelSerializer):
 
 class InstanceSerializer(serializers.ModelSerializer):
     created_by = UserSerializer(read_only=True)
+    # Add the group field for writes
+    group = serializers.PrimaryKeyRelatedField(queryset=Group.objects.all())
     items = ItemSerializer(many=True, read_only=True)
     
     class Meta:
         model = Instance
-        fields = ['id', 'name', 'date', 'description', 'created_by', 'created_at', 'items']
+        fields = ['id', 'name', 'date', 'description', 'group', 'created_by', 'created_at', 'items']
+
 
 class BalanceSerializer(serializers.ModelSerializer):
     from_user = UserSerializer(read_only=True)

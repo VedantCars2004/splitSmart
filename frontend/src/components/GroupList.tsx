@@ -19,9 +19,20 @@ const GroupList: React.FC = () => {
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [openDialog, setOpenDialog] = useState(false);
+  
+  // State for creating new groups
+  const [openCreateDialog, setOpenCreateDialog] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupDescription, setNewGroupDescription] = useState('');
+
+  // State for inviting a member to a group
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
+
+  // State for viewing details
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
 
   useEffect(() => {
     fetchGroups();
@@ -31,27 +42,22 @@ const GroupList: React.FC = () => {
     try {
       setLoading(true);
       const response = await groupApi.getGroups();
-      // Assuming the API client returns the data in the 'data' property:
       setGroups(response.data);
     } catch (error: any) {
-      // Enhanced error logging:
-      console.error("Failed to fetch groups:", error);
-      if (error.response) {
-        console.error("Response data:", error.response.data);
-        console.error("Response status:", error.response.status);
-      }
+      console.error('Failed to fetch groups:', error);
       setError('Failed to fetch groups');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOpenDialog = () => {
-    setOpenDialog(true);
+  // New Group Modal Handlers
+  const handleOpenCreateDialog = () => {
+    setOpenCreateDialog(true);
   };
 
-  const handleCloseDialog = () => {
-    setOpenDialog(false);
+  const handleCloseCreateDialog = () => {
+    setOpenCreateDialog(false);
     setNewGroupName('');
     setNewGroupDescription('');
   };
@@ -62,16 +68,69 @@ const GroupList: React.FC = () => {
         name: newGroupName,
         description: newGroupDescription
       });
-      handleCloseDialog();
+      handleCloseCreateDialog();
       fetchGroups();
     } catch (error: any) {
       console.error('Failed to create group:', error);
+      setError('Failed to create group');
+    }
+  };
+
+  // Remove Group Handler
+  const handleRemoveGroup = async (groupId: number) => {
+    try {
+      await groupApi.deleteGroup(groupId.toString());
+      fetchGroups();
+    } catch (error: any) {
+      console.error('Failed to remove group:', error);
+      setError('Failed to remove group');
+    }
+  };
+
+  // Invite Member Modal Handlers (Invite by email)
+  const handleOpenInviteDialog = (groupId: number) => {
+    setSelectedGroupId(groupId);
+    setInviteDialogOpen(true);
+  };
+
+  const handleCloseInviteDialog = () => {
+    setInviteDialogOpen(false);
+    setInviteEmail('');
+    setSelectedGroupId(null);
+  };
+
+  const handleInviteMember = async () => {
+    if (selectedGroupId === null) return;
+    if (!inviteEmail.trim()) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    try {
+      console.log(`Inviting ${inviteEmail} to group ${selectedGroupId}`);
+      await groupApi.addMember(selectedGroupId.toString(), inviteEmail);
+      handleCloseInviteDialog();
+      fetchGroups();
+    } catch (error: any) {
+      console.error('Failed to invite member:', error);
       if (error.response) {
         console.error("Response data:", error.response.data);
         console.error("Response status:", error.response.status);
+      } else {
+        console.error("Error message:", error.message);
       }
-      setError('Failed to create group');
+      setError('Failed to invite member');
     }
+  };
+
+  // View Details Handlers
+  const handleOpenDetailsDialog = (group: Group) => {
+    setSelectedGroup(group);
+    setDetailsDialogOpen(true);
+  };
+
+  const handleCloseDetailsDialog = () => {
+    setDetailsDialogOpen(false);
+    setSelectedGroup(null);
   };
 
   if (loading) {
@@ -89,7 +148,7 @@ const GroupList: React.FC = () => {
         <Button 
           variant="contained" 
           startIcon={<AddIcon />}
-          onClick={handleOpenDialog}
+          onClick={handleOpenCreateDialog}
         >
           New Group
         </Button>
@@ -114,7 +173,22 @@ const GroupList: React.FC = () => {
                   </Typography>
                 </CardContent>
                 <CardActions>
-                  <Button size="small">View Details</Button>
+                  <Button size="small" onClick={() => handleOpenDetailsDialog(group)}>
+                    View Details
+                  </Button>
+                  <Button 
+                    size="small" 
+                    color="error"
+                    onClick={() => handleRemoveGroup(group.id)}
+                  >
+                    Remove
+                  </Button>
+                  <Button 
+                    size="small"
+                    onClick={() => handleOpenInviteDialog(group.id)}
+                  >
+                    Invite
+                  </Button>
                 </CardActions>
               </Card>
             </Grid>
@@ -122,7 +196,8 @@ const GroupList: React.FC = () => {
         </Grid>
       )}
 
-      <Dialog open={openDialog} onClose={handleCloseDialog}>
+      {/* Create Group Dialog */}
+      <Dialog open={openCreateDialog} onClose={handleCloseCreateDialog}>
         <DialogTitle>Create New Group</DialogTitle>
         <DialogContent>
           <TextField
@@ -150,8 +225,56 @@ const GroupList: React.FC = () => {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button onClick={handleCloseCreateDialog}>Cancel</Button>
           <Button onClick={handleCreateGroup} variant="contained">Create</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Invite Member Dialog */}
+      <Dialog open={inviteDialogOpen} onClose={handleCloseInviteDialog}>
+        <DialogTitle>Invite Member</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            id="inviteEmail"
+            label="Member Email"
+            type="email"
+            fullWidth
+            variant="outlined"
+            value={inviteEmail}
+            onChange={(e) => setInviteEmail(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseInviteDialog}>Cancel</Button>
+          <Button onClick={handleInviteMember} variant="contained">Invite</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Group Details Dialog */}
+      <Dialog open={detailsDialogOpen} onClose={handleCloseDetailsDialog}>
+        <DialogTitle>Group Details</DialogTitle>
+        <DialogContent>
+          {selectedGroup && (
+            <Box>
+              <Typography variant="h5" component="div">
+                {selectedGroup.name}
+              </Typography>
+              <Typography variant="body1">
+                {selectedGroup.description}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Created At: {selectedGroup.created_at}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Members: {selectedGroup.members.length}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDetailsDialog}>Close</Button>
         </DialogActions>
       </Dialog>
     </div>

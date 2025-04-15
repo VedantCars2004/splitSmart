@@ -40,15 +40,18 @@ class GroupViewSet(viewsets.ModelViewSet):
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
+
+
 class InstanceViewSet(viewsets.ModelViewSet):
+    queryset = Instance.objects.all()
     serializer_class = InstanceSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
     def get_queryset(self):
         return Instance.objects.filter(group__members=self.request.user)
     
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
 
 class ItemViewSet(viewsets.ModelViewSet):
     serializer_class = ItemSerializer

@@ -23,13 +23,15 @@ api.interceptors.request.use(async (config) => {
 });
 
 export const groupApi = {
-  getGroups: () => api.get('/groups/'),
-  getGroup: (id: string) => api.get(`/groups/${id}/`),
-  createGroup: (data: any) => api.post('/groups/', data),
-  updateGroup: (id: string, data: any) => api.put(`/groups/${id}/`, data),
-  deleteGroup: (id: string) => api.delete(`/groups/${id}/`),
-  addMember: (groupId: string, userId: string) => api.post(`/groups/${groupId}/add_member/`, { user_id: userId }),
-};
+    getGroups: () => api.get('/groups/'),
+    getGroup: (id: string) => api.get(`/groups/${id}/`),
+    createGroup: (data: any) => api.post('/groups/', data),
+    updateGroup: (id: string, data: any) => api.put(`/groups/${id}/`, data),
+    deleteGroup: (id: string) => api.delete(`/groups/${id}/`),
+    addMember: (groupId: string, email: string) =>
+      api.post(`/groups/${groupId}/add_member/`, { email }),
+  };
+  
 
 export const instanceApi = {
   getInstances: () => api.get('/instances/'),

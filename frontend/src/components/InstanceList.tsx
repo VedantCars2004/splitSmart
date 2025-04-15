@@ -30,7 +30,7 @@ const InstanceList: React.FC = () => {
   const [newInstanceName, setNewInstanceName] = useState('');
   const [newInstanceDate, setNewInstanceDate] = useState('');
   const [newInstanceDescription, setNewInstanceDescription] = useState('');
-  const [selectedGroupId, setSelectedGroupId] = useState('');
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
 
   useEffect(() => {
     fetchData();
@@ -46,8 +46,8 @@ const InstanceList: React.FC = () => {
       setInstances(instancesResponse.data);
       setGroups(groupsResponse.data);
     } catch (error) {
-      setError('Failed to fetch data');
       console.error(error);
+      setError('Failed to fetch data');
     } finally {
       setLoading(false);
     }
@@ -67,20 +67,27 @@ const InstanceList: React.FC = () => {
 
   const handleCreateInstance = async () => {
     try {
-      await instanceApi.createInstance({
+      // Prepare payload with the key 'group'
+      const payload = {
         name: newInstanceName,
         date: newInstanceDate,
         description: newInstanceDescription,
-        group: selectedGroupId
-      });
+        group: selectedGroupId  // selectedGroupId is a string containing the group ID
+      };
+      console.log('Creating instance with payload:', payload);
+      await instanceApi.createInstance(payload);
       handleCloseDialog();
       fetchData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create instance', error);
+      if (error.response) {
+        console.error('Response data:', error.response.data);
+        console.error('Response status:', error.response.status);
+      }
       setError('Failed to create instance');
     }
   };
-
+  
   if (loading) {
     return <CircularProgress />;
   }
@@ -107,7 +114,7 @@ const InstanceList: React.FC = () => {
       ) : (
         <Grid container spacing={3}>
           {instances.map((instance) => (
-            <Grid key={instance.id}>
+            <Grid key={instance.id} >
               <Card>
                 <CardContent>
                   <Typography variant="h5" component="div">
@@ -178,10 +185,12 @@ const InstanceList: React.FC = () => {
               id="group-select"
               value={selectedGroupId}
               label="Group"
-              onChange={(e) => setSelectedGroupId(e.target.value)}
+              onChange={(e) => setSelectedGroupId(e.target.value as string)}
             >
               {groups.map((group) => (
-                <MenuItem key={group.id} value={group.id}>{group.name}</MenuItem>
+                <MenuItem key={group.id} value={group.id.toString()}>
+                  {group.name}
+                </MenuItem>
               ))}
             </Select>
           </FormControl>
