@@ -5,7 +5,6 @@ import {
   TextField, CircularProgress, Box
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import type { ReactNode } from 'react';
 import { groupApi } from '../services/api';
 
 interface Group {
@@ -32,10 +31,16 @@ const GroupList: React.FC = () => {
     try {
       setLoading(true);
       const response = await groupApi.getGroups();
+      // Assuming the API client returns the data in the 'data' property:
       setGroups(response.data);
-    } catch (error) {
+    } catch (error: any) {
+      // Enhanced error logging:
+      console.error("Failed to fetch groups:", error);
+      if (error.response) {
+        console.error("Response data:", error.response.data);
+        console.error("Response status:", error.response.status);
+      }
       setError('Failed to fetch groups');
-      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -59,8 +64,12 @@ const GroupList: React.FC = () => {
       });
       handleCloseDialog();
       fetchGroups();
-    } catch (error) {
-      console.error('Failed to create group', error);
+    } catch (error: any) {
+      console.error('Failed to create group:', error);
+      if (error.response) {
+        console.error("Response data:", error.response.data);
+        console.error("Response status:", error.response.status);
+      }
       setError('Failed to create group');
     }
   };
