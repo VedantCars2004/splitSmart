@@ -1,0 +1,33 @@
+{
+    "version": 2,
+    "builds": [
+      {
+        "src": "backend/splitexpenses_project/wsgi.py",
+        "use": "@vercel/python",
+        "config": { "maxLambdaSize": "15mb" }
+      },
+      {
+        "src": "frontend/package.json",
+        "use": "@vercel/static-build",
+        "config": { "distDir": "build" }
+      }
+    ],
+    "routes": [
+      {
+        "src": "/api/(.*)",
+        "dest": "backend/splitexpenses_project/wsgi.py"
+      },
+      {
+        "src": "/admin/(.*)",
+        "dest": "backend/splitexpenses_project/wsgi.py"
+      },
+      {
+        "src": "/static/(.*)",
+        "dest": "frontend/build/static/$1"
+      },
+      {
+        "src": "/(.*)",
+        "dest": "frontend/build/index.html"
+      }
+    ]
+  }
