@@ -3,10 +3,10 @@ import {
   Typography, Button, Card, CardContent, CardActions, 
   Grid, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, CircularProgress, MenuItem, Select, InputLabel,
-  FormControl, Box
+  FormControl, Box, OutlinedInput, Chip
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import { instanceApi, groupApi } from '../services/api';
+import { instanceApi, groupApi, itemApi } from '../services/api';
 
 interface Instance {
   id: number;
@@ -14,24 +14,46 @@ interface Instance {
   date: string;
   description: string;
   items: any[];
+  group: number; // Instance belongs to a group
 }
 
 interface Group {
   id: number;
   name: string;
+  members: User[];
+}
+
+interface User {
+  id: number;
+  username: string;
+  email: string;
 }
 
 const InstanceList: React.FC = () => {
+  // State for instance list and groups (for instance creation)
   const [instances, setInstances] = useState<Instance[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [openDialog, setOpenDialog] = useState(false);
+
+  // State for creating a new instance (shopping trip)
+  const [openInstanceDialog, setOpenInstanceDialog] = useState(false);
   const [newInstanceName, setNewInstanceName] = useState('');
   const [newInstanceDate, setNewInstanceDate] = useState('');
   const [newInstanceDescription, setNewInstanceDescription] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
 
+  // State for instance details dialog (when "View Details" is clicked)
+  const [openDetailsDialog, setOpenDetailsDialog] = useState(false);
+  const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null);
+  const [groupMembers, setGroupMembers] = useState<User[]>([]);
+
+  // State for adding a new item inside an instance
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemPrice, setNewItemPrice] = useState<number>(0);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+
+  // Fetch instance list and groups on mount.
   useEffect(() => {
     fetchData();
   }, []);
@@ -53,12 +75,13 @@ const InstanceList: React.FC = () => {
     }
   };
 
-  const handleOpenDialog = () => {
-    setOpenDialog(true);
+  // --- New Instance (Shopping Trip) Dialog Handlers ---
+  const handleOpenInstanceDialog = () => {
+    setOpenInstanceDialog(true);
   };
 
-  const handleCloseDialog = () => {
-    setOpenDialog(false);
+  const handleCloseInstanceDialog = () => {
+    setOpenInstanceDialog(false);
     setNewInstanceName('');
     setNewInstanceDate('');
     setNewInstanceDescription('');
@@ -67,16 +90,16 @@ const InstanceList: React.FC = () => {
 
   const handleCreateInstance = async () => {
     try {
-      // Prepare payload with the key 'group'
+      // Prepare payload with key 'group'
       const payload = {
         name: newInstanceName,
         date: newInstanceDate,
         description: newInstanceDescription,
-        group: selectedGroupId  // selectedGroupId is a string containing the group ID
+        group: selectedGroupId  // selectedGroupId as string
       };
       console.log('Creating instance with payload:', payload);
       await instanceApi.createInstance(payload);
-      handleCloseDialog();
+      handleCloseInstanceDialog();
       fetchData();
     } catch (error: any) {
       console.error('Failed to create instance', error);
@@ -87,7 +110,58 @@ const InstanceList: React.FC = () => {
       setError('Failed to create instance');
     }
   };
-  
+
+  // --- Instance Details Handlers (to view items and add new item) ---
+  const handleOpenDetailsDialog = async (instance: Instance) => {
+    setSelectedInstance(instance);
+    setOpenDetailsDialog(true);
+    // Fetch group members for the instance's group using groupApi.getGroup
+    try {
+      const response = await groupApi.getGroup(instance.group.toString());
+      // Assume the response has a 'members' field
+      setGroupMembers(response.data.members);
+    } catch (err) {
+      console.error('Failed to fetch group members:', err);
+      setError('Failed to fetch group members');
+    }
+  };
+
+  const handleCloseDetailsDialog = () => {
+    setOpenDetailsDialog(false);
+    setSelectedInstance(null);
+    setNewItemName('');
+    setNewItemPrice(0);
+    setSelectedUserIds([]);
+  };
+
+  const handleCreateItem = async () => {
+    if (!selectedInstance) return;
+    try {
+      const payload = {
+        instance: selectedInstance.id,
+        name: newItemName,
+        price: newItemPrice,
+        shared_with: selectedUserIds  // Array of user ID strings
+      };
+      console.log('Creating item with payload:', payload);
+      await itemApi.createItem(payload);
+      // After successfully adding the item, refresh instance details:
+      // For simplicity, we re-fetch all instances.
+      fetchData();
+      // Optionally clear the add item fields:
+      setNewItemName('');
+      setNewItemPrice(0);
+      setSelectedUserIds([]);
+    } catch (error: any) {
+      console.error('Failed to create item:', error);
+      if (error.response) {
+        console.error('Response data:', error.response.data);
+        console.error('Response status:', error.response.status);
+      }
+      setError('Failed to create item');
+    }
+  };
+
   if (loading) {
     return <CircularProgress />;
   }
@@ -98,12 +172,13 @@ const InstanceList: React.FC = () => {
 
   return (
     <div>
+      {/* Instance (Shopping Trip) List */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">Shopping Instances</Typography>
         <Button 
           variant="contained" 
           startIcon={<AddIcon />}
-          onClick={handleOpenDialog}
+          onClick={handleOpenInstanceDialog}
         >
           New Shopping Trip
         </Button>
@@ -114,12 +189,10 @@ const InstanceList: React.FC = () => {
       ) : (
         <Grid container spacing={3}>
           {instances.map((instance) => (
-            <Grid key={instance.id} >
+            <Grid key={instance.id}>
               <Card>
                 <CardContent>
-                  <Typography variant="h5" component="div">
-                    {instance.name}
-                  </Typography>
+                  <Typography variant="h5">{instance.name}</Typography>
                   <Typography variant="body2" color="text.secondary">
                     Date: {new Date(instance.date).toLocaleDateString()}
                   </Typography>
@@ -131,7 +204,9 @@ const InstanceList: React.FC = () => {
                   </Typography>
                 </CardContent>
                 <CardActions>
-                  <Button size="small">View Details</Button>
+                  <Button size="small" onClick={() => handleOpenDetailsDialog(instance)}>
+                    View Details
+                  </Button>
                 </CardActions>
               </Card>
             </Grid>
@@ -139,13 +214,13 @@ const InstanceList: React.FC = () => {
         </Grid>
       )}
 
-      <Dialog open={openDialog} onClose={handleCloseDialog}>
+      {/* Create New Instance Dialog */}
+      <Dialog open={openInstanceDialog} onClose={handleCloseInstanceDialog}>
         <DialogTitle>Create New Shopping Trip</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
             margin="dense"
-            id="name"
             label="Trip Name"
             type="text"
             fullWidth
@@ -155,20 +230,16 @@ const InstanceList: React.FC = () => {
           />
           <TextField
             margin="dense"
-            id="date"
             label="Date"
             type="date"
             fullWidth
             variant="outlined"
-            InputLabelProps={{
-              shrink: true,
-            }}
+            InputLabelProps={{ shrink: true }}
             value={newInstanceDate}
             onChange={(e) => setNewInstanceDate(e.target.value)}
           />
           <TextField
             margin="dense"
-            id="description"
             label="Description"
             type="text"
             fullWidth
@@ -182,7 +253,6 @@ const InstanceList: React.FC = () => {
             <InputLabel id="group-select-label">Group</InputLabel>
             <Select
               labelId="group-select-label"
-              id="group-select"
               value={selectedGroupId}
               label="Group"
               onChange={(e) => setSelectedGroupId(e.target.value as string)}
@@ -196,8 +266,86 @@ const InstanceList: React.FC = () => {
           </FormControl>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button onClick={handleCloseInstanceDialog}>Cancel</Button>
           <Button onClick={handleCreateInstance} variant="contained">Create</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Instance Details Dialog */}
+      <Dialog open={openDetailsDialog} onClose={handleCloseDetailsDialog} fullWidth maxWidth="sm">
+        <DialogTitle>Instance Details</DialogTitle>
+        <DialogContent>
+          {selectedInstance && (
+            <Box>
+              <Typography variant="h5">{selectedInstance.name}</Typography>
+              <Typography>Date: {new Date(selectedInstance.date).toLocaleDateString()}</Typography>
+              <Typography>{selectedInstance.description}</Typography>
+              <Typography sx={{ mt: 2 }} variant="h6">Items</Typography>
+              {selectedInstance.items.length === 0 ? (
+                <Typography>No items recorded for this instance.</Typography>
+              ) : (
+                selectedInstance.items.map((item: any) => (
+                  <Box key={item.id} mb={1}>
+                    <Typography variant="subtitle1">{item.name} - ${item.price}</Typography>
+                    <Typography variant="body2">
+                      Shared With: {item.shared_with && item.shared_with.map((u: any) => u.username).join(', ')}
+                    </Typography>
+                  </Box>
+                ))
+              )}
+              {/* Add Item Section */}
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="h6">Add New Item</Typography>
+                <TextField
+                  margin="dense"
+                  label="Item Name"
+                  fullWidth
+                  variant="outlined"
+                  value={newItemName}
+                  onChange={(e) => setNewItemName(e.target.value)}
+                />
+                <TextField
+                  margin="dense"
+                  label="Price"
+                  type="number"
+                  fullWidth
+                  variant="outlined"
+                  value={newItemPrice}
+                  onChange={(e) => setNewItemPrice(parseFloat(e.target.value))}
+                />
+                <FormControl fullWidth margin="dense">
+                  <InputLabel id="shared-with-label">Share With</InputLabel>
+                  <Select
+                    labelId="shared-with-label"
+                    multiple
+                    value={selectedUserIds}
+                    onChange={(e) => setSelectedUserIds(e.target.value as string[])}
+                    input={<OutlinedInput label="Share With" />}
+                    renderValue={(selected) => (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {(selected as string[]).map((value) => {
+                          const member = groupMembers.find(m => m.id.toString() === value);
+                          return <Chip key={value} label={member ? member.username : value} />;
+                        })}
+                      </Box>
+                    )}
+                  >
+                    {groupMembers.map((member) => (
+                      <MenuItem key={member.id} value={member.id.toString()}>
+                        {member.username} ({member.email})
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <Button onClick={handleCreateItem} variant="contained" sx={{ mt: 2 }}>
+                  Add Item
+                </Button>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDetailsDialog}>Close</Button>
         </DialogActions>
       </Dialog>
     </div>
