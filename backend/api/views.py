@@ -29,12 +29,13 @@ class GroupViewSet(viewsets.ModelViewSet):
         GroupMember.objects.create(group=group, user=self.request.user)
     
     @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'])
     def add_member(self, request, pk=None):
         group = self.get_object()
-        user_id = request.data.get('user_id')
+        email = request.data.get('email')
         
         try:
-            user = User.objects.get(id=user_id)
+            user = User.objects.get(email=email)
             GroupMember.objects.create(group=group, user=user)
             return Response({'status': 'member added'})
         except User.DoesNotExist:
