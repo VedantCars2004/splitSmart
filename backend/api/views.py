@@ -1,6 +1,4 @@
 from django.shortcuts import render
-
-# Create your views here.
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -21,14 +19,36 @@ class GroupViewSet(viewsets.ModelViewSet):
     serializer_class = GroupSerializer
     permission_classes = [permissions.IsAuthenticated]
     
+    def get_object(self):
+        queryset = self.filter_queryset(self.get_queryset())
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        lookup_value = self.kwargs[lookup_url_kwarg]
+        obj = queryset.filter(pk=lookup_value).first()
+        self.check_object_permissions(self.request, obj)
+        return obj
+    
     def get_queryset(self):
         return Group.objects.filter(members=self.request.user)
     
     def perform_create(self, serializer):
         group = serializer.save(created_by=self.request.user)
         GroupMember.objects.create(group=group, user=self.request.user)
-    
+        
     @action(detail=True, methods=['post'])
+    def leave_group(self, request, pk=None):
+        group = self.get_object()
+        user = request.user
+        try:
+            membership = GroupMember.objects.get(group=group, user=user)
+            membership.delete()
+            if GroupMember.objects.filter(group=group).count() == 0:
+                group.delete()
+                return Response({'status': 'group deleted as you were the last member'})
+            return Response({'status': 'you have left the group'})
+        except GroupMember.DoesNotExist:
+            return Response({'error': 'You are not a member of this group'}, 
+                            status=status.HTTP_400_BAD_REQUEST)
+    
     @action(detail=True, methods=['post'])
     def add_member(self, request, pk=None):
         group = self.get_object()

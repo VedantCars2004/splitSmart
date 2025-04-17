@@ -28,6 +28,7 @@ export const groupApi = {
     createGroup: (data: any) => api.post('/groups/', data),
     updateGroup: (id: string, data: any) => api.put(`/groups/${id}/`, data),
     deleteGroup: (id: string) => api.delete(`/groups/${id}/`),
+    leaveGroup: (groupId: string) => api.post(`/groups/${groupId}/leave_group/`),
     addMember: (groupId: string, email: string) =>
       api.post(`/groups/${groupId}/add_member/`, { email }),
   };

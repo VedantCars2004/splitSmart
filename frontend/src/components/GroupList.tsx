@@ -51,6 +51,16 @@ const GroupList: React.FC = () => {
     }
   };
 
+  const handleLeaveGroup = async (groupId: number) => {
+    try {
+      await groupApi.leaveGroup(groupId.toString());
+      fetchGroups(); // Refresh the list
+    } catch (error: any) {
+      console.error('Failed to leave group:', error);
+      setError('Failed to leave group');
+    }
+  };
+
   // New Group Modal Handlers
   const handleOpenCreateDialog = () => {
     setOpenCreateDialog(true);
@@ -188,6 +198,12 @@ const GroupList: React.FC = () => {
                     onClick={() => handleOpenInviteDialog(group.id)}
                   >
                     Invite
+                  </Button>
+                  <Button 
+                  size="small"
+                  color="secondary"
+                  onClick={() => handleLeaveGroup(group.id)}>
+                  Leave Group
                   </Button>
                 </CardActions>
               </Card>
