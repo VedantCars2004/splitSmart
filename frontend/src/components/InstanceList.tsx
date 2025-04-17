@@ -3,9 +3,11 @@ import {
   Typography, Button, Card, CardContent, CardActions, 
   Grid, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, CircularProgress, MenuItem, Select, InputLabel,
-  FormControl, Box, OutlinedInput, Chip
+  FormControl, Box, OutlinedInput, Chip, IconButton
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
 import { instanceApi, groupApi, itemApi } from '../services/api';
 
 interface Instance {
@@ -27,6 +29,14 @@ interface User {
   id: number;
   username: string;
   email: string;
+}
+
+// Add a new interface for edit item state
+interface EditItemState {
+  id: number;
+  name: string;
+  price: number;
+  selectedUserIds: string[];
 }
 
 const InstanceList: React.FC = () => {
@@ -52,6 +62,10 @@ const InstanceList: React.FC = () => {
   const [newItemName, setNewItemName] = useState('');
   const [newItemPrice, setNewItemPrice] = useState<number>(0);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+
+  // State for edit item dialog
+  const [openEditDialog, setOpenEditDialog] = useState(false);
+  const [editItem, setEditItem] = useState<EditItemState | null>(null);
 
   // Fetch instance list and groups on mount.
   useEffect(() => {
@@ -137,19 +151,24 @@ const InstanceList: React.FC = () => {
   const handleCreateItem = async () => {
     if (!selectedInstance) return;
     try {
-        const payload = {
-            instance: selectedInstance.id,
-            name: newItemName,
-            price: newItemPrice,
-            shared_with: Array.isArray(selectedUserIds) ? selectedUserIds : [selectedUserIds]
-          };
+      const payload = {
+        instance: selectedInstance.id,
+        name: newItemName,
+        price: newItemPrice,
+        shared_with: Array.isArray(selectedUserIds) ? selectedUserIds : [selectedUserIds]
+      };
       console.log('Creating item with payload:', payload);
       
-      // Add some debugging to see the exact request
       const response = await itemApi.createItem(payload);
       console.log('Success response:', response);
       
-      // Rest of your code
+      // Reset form
+      setNewItemName('');
+      setNewItemPrice(0);
+      setSelectedUserIds([]);
+      
+      // Refresh instance details
+      refreshInstanceDetails(selectedInstance.id);
     } catch (error: any) {
       console.error('Failed to create item:', error);
       if (error.response) {
@@ -164,7 +183,72 @@ const InstanceList: React.FC = () => {
       }
       setError('Failed to create item');
     }
-};
+  };
+
+  // --- Edit and Delete Item Handlers ---
+  const handleDeleteItem = async (itemId: number) => {
+    try {
+      await itemApi.deleteItem(itemId.toString()); // Convert id to string
+      // Refresh instance details if currently viewing
+      if (selectedInstance) {
+        refreshInstanceDetails(selectedInstance.id);
+      }
+    } catch (error) {
+      console.error('Failed to delete item:', error);
+      setError('Failed to delete item');
+    }
+  };
+
+  const handleOpenEditDialog = (item: any) => {
+    // Get current user IDs from shared_with
+    const userIds = item.shared_with ? 
+      item.shared_with.map((share: any) => share.user.id.toString()) : [];
+    
+    setEditItem({
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      selectedUserIds: userIds
+    });
+    setOpenEditDialog(true);
+  };
+
+  const handleCloseEditDialog = () => {
+    setOpenEditDialog(false);
+    setEditItem(null);
+  };
+
+  const handleUpdateItem = async () => {
+    if (!editItem) return;
+    try {
+      const payload = {
+        name: editItem.name,
+        price: editItem.price,
+        shared_with: editItem.selectedUserIds
+      };
+      
+      await itemApi.updateItem(editItem.id.toString(), payload); // Convert id to string
+      handleCloseEditDialog();
+      
+      // Refresh instance details if currently viewing
+      if (selectedInstance) {
+        refreshInstanceDetails(selectedInstance.id);
+      }
+    } catch (error: any) {
+      console.error('Failed to update item:', error);
+      setError('Failed to update item');
+    }
+  };
+
+  // Helper function to refresh instance details
+  const refreshInstanceDetails = async (instanceId: number) => {
+    try {
+      const response = await instanceApi.getInstance(instanceId.toString()); // Convert id to string
+      setSelectedInstance(response.data);
+    } catch (error) {
+      console.error('Failed to refresh instance details:', error);
+    }
+  };
 
   if (loading) {
     return <CircularProgress />;
@@ -289,11 +373,36 @@ const InstanceList: React.FC = () => {
                 <Typography>No items recorded for this instance.</Typography>
               ) : (
                 selectedInstance.items.map((item: any) => (
-                  <Box key={item.id} mb={1}>
-                    <Typography variant="subtitle1">{item.name} - ${item.price}</Typography>
-                    <Typography variant="body2">
-                      Shared With: {item.shared_with && item.shared_with.map((u: any) => u.username).join(', ')}
-                    </Typography>
+                  <Box key={item.id} mb={1} sx={{ 
+                    p: 2, 
+                    border: '1px solid #ddd', 
+                    borderRadius: 1, 
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <Box>
+                      <Typography variant="subtitle1">{item.name} - ${item.price}</Typography>
+                      <Typography variant="body2">
+                        Shared With: {item.shared_with && item.shared_with.map((u: any) => u.user.username).join(', ')}
+                      </Typography>
+                    </Box>
+                    <Box>
+                      <IconButton 
+                        color="primary" 
+                        onClick={() => handleOpenEditDialog(item)}
+                        size="small"
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton 
+                        color="error" 
+                        onClick={() => handleDeleteItem(item.id)}
+                        size="small"
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Box>
                   </Box>
                 ))
               )}
@@ -350,6 +459,58 @@ const InstanceList: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDetailsDialog}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Item Dialog */}
+      <Dialog open={openEditDialog} onClose={handleCloseEditDialog}>
+        <DialogTitle>Edit Item</DialogTitle>
+        <DialogContent>
+          <TextField
+            margin="dense"
+            label="Item Name"
+            fullWidth
+            variant="outlined"
+            value={editItem?.name || ''}
+            onChange={(e) => setEditItem(prev => prev ? {...prev, name: e.target.value} : null)}
+          />
+          <TextField
+            margin="dense"
+            label="Price"
+            type="number"
+            fullWidth
+            variant="outlined"
+            value={editItem?.price || 0}
+            onChange={(e) => setEditItem(prev => prev ? {...prev, price: parseFloat(e.target.value)} : null)}
+          />
+          <FormControl fullWidth margin="dense">
+            <InputLabel id="edit-shared-with-label">Share With</InputLabel>
+            <Select
+              labelId="edit-shared-with-label"
+              multiple
+              value={editItem?.selectedUserIds || []}
+              onChange={(e) => setEditItem(prev => prev ? {...prev, selectedUserIds: e.target.value as string[]} : null)}
+              input={<OutlinedInput label="Share With" />}
+              renderValue={(selected) => (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {(selected as string[]).map((value) => {
+                    const member = groupMembers.find(m => m.id.toString() === value);
+                    return <Chip key={value} label={member ? member.username : value} />;
+                  })}
+                </Box>
+              )}
+            >
+              {groupMembers.map((member) => (
+                <MenuItem key={member.id} value={member.id.toString()}>
+                  {member.username} ({member.email})
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseEditDialog}>Cancel</Button>
+          <Button onClick={handleUpdateItem} variant="contained">Update Item</Button>
         </DialogActions>
       </Dialog>
     </div>
