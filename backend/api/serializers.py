@@ -27,15 +27,17 @@ class ItemSplitSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = ItemSplit
-        fields = ['id', 'user', 'split_amount']
+        fields = ['id', 'user', 'amount']
 
 class ItemSerializer(serializers.ModelSerializer):
     created_by = UserSerializer(read_only=True)
-    shared_with = ItemSplitSerializer(source='itemsplit_set', many=True, read_only=True)
+    shared_with = ItemSplitSerializer(source='splits', many=True, read_only=True)
+    # Add this line to make instance writable:
+    instance = serializers.PrimaryKeyRelatedField(queryset=Instance.objects.all())
     
     class Meta:
         model = Item
-        fields = ['id', 'name', 'price', 'created_by', 'created_at', 'shared_with']
+        fields = ['id', 'name', 'price', 'created_by', 'created_at', 'shared_with', 'instance']
 
 class InstanceSerializer(serializers.ModelSerializer):
     created_by = UserSerializer(read_only=True)

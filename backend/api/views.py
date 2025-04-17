@@ -61,7 +61,9 @@ class ItemViewSet(viewsets.ModelViewSet):
         return Item.objects.filter(instance__group__members=self.request.user)
     
     def perform_create(self, serializer):
-        item = serializer.save(created_by=self.request.user)
+        instance_id = self.request.data.get('instance')
+        instance = Instance.objects.get(id=instance_id)
+        item = serializer.save(created_by=self.request.user, instance=instance)
         
         # Create item splits based on shared_with users
         shared_with_ids = self.request.data.get('shared_with', [])
@@ -73,7 +75,7 @@ class ItemViewSet(viewsets.ModelViewSet):
                 ItemSplit.objects.create(
                     item=item,
                     user=user,
-                    split_amount=split_amount
+                    amount=split_amount
                 )
                 
             # Update balances

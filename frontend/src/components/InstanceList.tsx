@@ -137,30 +137,34 @@ const InstanceList: React.FC = () => {
   const handleCreateItem = async () => {
     if (!selectedInstance) return;
     try {
-      const payload = {
-        instance: selectedInstance.id,
-        name: newItemName,
-        price: newItemPrice,
-        shared_with: selectedUserIds  // Array of user ID strings
-      };
+        const payload = {
+            instance: selectedInstance.id,
+            name: newItemName,
+            price: newItemPrice,
+            shared_with: Array.isArray(selectedUserIds) ? selectedUserIds : [selectedUserIds]
+          };
       console.log('Creating item with payload:', payload);
-      await itemApi.createItem(payload);
-      // After successfully adding the item, refresh instance details:
-      // For simplicity, we re-fetch all instances.
-      fetchData();
-      // Optionally clear the add item fields:
-      setNewItemName('');
-      setNewItemPrice(0);
-      setSelectedUserIds([]);
+      
+      // Add some debugging to see the exact request
+      const response = await itemApi.createItem(payload);
+      console.log('Success response:', response);
+      
+      // Rest of your code
     } catch (error: any) {
       console.error('Failed to create item:', error);
       if (error.response) {
         console.error('Response data:', error.response.data);
-        console.error('Response status:', error.response.status);
+        
+        // Get more details from the error response
+        const errorText = typeof error.response.data === 'string' 
+          ? error.response.data
+          : JSON.stringify(error.response.data);
+          
+        console.error('Error details:', errorText);
       }
       setError('Failed to create item');
     }
-  };
+};
 
   if (loading) {
     return <CircularProgress />;
