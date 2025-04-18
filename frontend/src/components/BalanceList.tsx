@@ -1,22 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Typography, Card, CardContent, Grid, CircularProgress, 
+import React, { useState, useEffect, Fragment } from 'react';
+import {
+  Typography, Card, CardContent, Grid, CircularProgress,
   List, ListItem, ListItemText, Divider, Box, Paper
 } from '@mui/material';
-import api from '../services/api';
 import { balanceApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+
 interface Balance {
   id: number;
   from_user: {
     id: number;
     username: string;
+    email: string;
     first_name: string;
     last_name: string;
   };
   to_user: {
     id: number;
     username: string;
+    email: string;
     first_name: string;
     last_name: string;
   };
@@ -37,33 +39,71 @@ const BalanceList: React.FC = () => {
     try {
       setLoading(true);
       const response = await balanceApi.getBalances();
-      setBalances(response.data);
-    } catch (error) {
+      
+      // Debug logging
+      console.log("Current user:", currentUser);
+      console.log("Raw balances data:", response.data);
+      
+      // sanitize amount → number
+      const sanitized = response.data.map((b: Balance) => ({
+        ...b,
+        amount: typeof b.amount === 'string'
+          ? parseFloat(b.amount)
+          : b.amount
+      }));
+      
+      setBalances(sanitized);
+    } catch (err) {
+      console.error("Balance API error:", err);
       setError('Failed to fetch balances');
-      console.error(error);
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) {
-    return <CircularProgress />;
-  }
+  useEffect(() => {
+    if (balances.length > 0 && currentUser) {
+      console.log("All balances after loading:", balances);
+      console.log("Current user email:", currentUser.email);
+      
+      // Check which balances match our user
+      const matchingFromUsername = balances.filter(b => b.from_user.username === currentUser.email);
+      const matchingToUsername = balances.filter(b => b.to_user.username === currentUser.email);
+      const matchingFromEmail = balances.filter(b => b.from_user.email === currentUser.email);
+      const matchingToEmail = balances.filter(b => b.to_user.email === currentUser.email);
+      
+      console.log("Matching by from_user.username:", matchingFromUsername);
+      console.log("Matching by to_user.username:", matchingToUsername);
+      console.log("Matching by from_user.email:", matchingFromEmail);
+      console.log("Matching by to_user.email:", matchingToEmail);
+    }
+  }, [balances, currentUser]);
 
-  if (error) {
-    return <Typography color="error">{error}</Typography>;
-  }
-  const userId = currentUser?.uid;
-  // Split balances into what I owe and what others owe me
-  const iOwe = balances.filter(balance => balance.from_user.username === userId);
-  const othersOweMe = balances.filter(balance => balance.to_user.username === userId);
+  if (loading) return <CircularProgress />;
+  if (error) return <Typography color="error">{error}</Typography>;
+
+  // Make sure we have a current user
+  if (!currentUser) return <Typography>Please log in to see balances</Typography>;
+
+  const currentUserEmail = currentUser.email;
+  
+  // Try to match the user by both username and email
+  const iOwe = balances.filter(b => 
+    b.from_user.username === currentUserEmail || 
+    b.from_user.email === currentUserEmail
+  );
+
+  const othersOweMe = balances.filter(b => 
+    b.to_user.username === currentUserEmail || 
+    b.to_user.email === currentUserEmail
+  );
 
   return (
     <div>
       <Typography variant="h4" gutterBottom>My Balances</Typography>
       
       <Grid container spacing={4}>
-        <Grid> 
+        <Grid>
           <Paper elevation={3}>
             <Box sx={{ p: 2, bgcolor: 'error.light' }}>
               <Typography variant="h6">I Owe</Typography>
@@ -74,16 +114,16 @@ const BalanceList: React.FC = () => {
                   <ListItemText primary="You don't owe anyone" />
                 </ListItem>
               ) : (
-                iOwe.map((balance) => (
-                  <React.Fragment key={balance.id}>
+                iOwe.map(b => (
+                  <Fragment key={b.id}>
                     <ListItem>
-                      <ListItemText 
-                        primary={`${balance.to_user.first_name} ${balance.to_user.last_name}`} 
-                        secondary={`$${balance.amount.toFixed(2)}`} 
+                      <ListItemText
+                        primary={`${b.to_user.first_name || b.to_user.username} ${b.to_user.last_name || ''}`}
+                        secondary={`$${b.amount.toFixed(2)}`}
                       />
                     </ListItem>
                     <Divider />
-                  </React.Fragment>
+                  </Fragment>
                 ))
               )}
             </List>
@@ -101,16 +141,16 @@ const BalanceList: React.FC = () => {
                   <ListItemText primary="No one owes you" />
                 </ListItem>
               ) : (
-                othersOweMe.map((balance) => (
-                  <React.Fragment key={balance.id}>
+                othersOweMe.map(b => (
+                  <Fragment key={b.id}>
                     <ListItem>
-                      <ListItemText 
-                        primary={`${balance.from_user.first_name} ${balance.from_user.last_name}`} 
-                        secondary={`$${balance.amount.toFixed(2)}`} 
+                      <ListItemText
+                        primary={`${b.from_user.first_name || b.from_user.username} ${b.from_user.last_name || ''}`}
+                        secondary={`$${b.amount.toFixed(2)}`}
                       />
                     </ListItem>
                     <Divider />
-                  </React.Fragment>
+                  </Fragment>
                 ))
               )}
             </List>
