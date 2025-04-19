@@ -4,7 +4,7 @@ import {
   Drawer, List, ListItem, ListItemIcon, ListItemText,
   Tab, Tabs, Container, Button, Menu, MenuItem, Avatar,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField
+  TextField, DialogContentText
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import GroupIcon from '@mui/icons-material/Group';
@@ -47,10 +47,14 @@ function TabPanel(props: TabPanelProps) {
 const Dashboard: React.FC = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [tabValue, setTabValue] = useState(0);
-  const { logout, currentUser } = useAuth();
+  const { logout, currentUser, deleteAccount } = useAuth();
   const [profileMenuAnchor, setProfileMenuAnchor] = useState<null | HTMLElement>(null);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  
+  // State for delete account confirmation dialog
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -100,6 +104,29 @@ const Dashboard: React.FC = () => {
   const handleSaveProfile = () => {
     // Here you would typically save the profile picture to your backend
     handleCloseProfileDialog();
+  };
+
+  // Delete account handlers
+  const handleOpenDeleteDialog = () => {
+    handleProfileMenuClose();
+    setDeleteDialogOpen(true);
+    setDeleteConfirmText('');
+  };
+
+  const handleCloseDeleteDialog = () => {
+    setDeleteDialogOpen(false);
+    setDeleteConfirmText('');
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText === 'DELETE') {
+      try {
+        await deleteAccount();
+        // After successful deletion, user will be redirected to login
+      } catch (error) {
+        console.error("Failed to delete account", error);
+      }
+    }
   };
 
   const drawer = (
@@ -195,6 +222,9 @@ const Dashboard: React.FC = () => {
           {currentUser?.email || "User"}
         </MenuItem>
         <MenuItem onClick={handleOpenProfileDialog}>Edit Profile</MenuItem>
+        <MenuItem onClick={handleOpenDeleteDialog} sx={{ color: 'error.main' }}>
+          Delete Account
+        </MenuItem>
       </Menu>
 
       {/* Profile Dialog */}
@@ -232,6 +262,40 @@ const Dashboard: React.FC = () => {
         <DialogActions>
           <Button onClick={handleCloseProfileDialog}>Cancel</Button>
           <Button onClick={handleSaveProfile} variant="contained">Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Account Dialog */}
+      <Dialog open={deleteDialogOpen} onClose={handleCloseDeleteDialog}>
+        <DialogTitle sx={{ color: 'error.main' }}>Delete Account</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Warning: This action cannot be undone. All your data, including groups, 
+            expenses, and balances will be permanently deleted.
+          </DialogContentText>
+          <DialogContentText sx={{ mt: 2, fontWeight: 'bold' }}>
+            To confirm deletion, type "DELETE" in the field below.
+          </DialogContentText>
+          <TextField
+            fullWidth
+            margin="normal"
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+            placeholder="Type DELETE to confirm"
+            variant="outlined"
+            autoFocus
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDeleteDialog}>Cancel</Button>
+          <Button 
+            onClick={handleDeleteAccount} 
+            color="error" 
+            variant="contained"
+            disabled={deleteConfirmText !== 'DELETE'}
+          >
+            Delete Account
+          </Button>
         </DialogActions>
       </Dialog>
 

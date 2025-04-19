@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { 
-  createUserWithEmailAndPassword, 
+import {
+  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
@@ -14,6 +14,7 @@ interface AuthContextType {
   register: (email: string, password: string) => Promise<UserCredential>;
   login: (email: string, password: string) => Promise<UserCredential>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   loading: boolean;
 }
 
@@ -39,6 +40,13 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     return signOut(auth);
   };
 
+  const deleteAccount = async () => {
+    if (currentUser) {
+      return currentUser.delete();
+    }
+    throw new Error("No user is signed in");
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
@@ -53,9 +61,10 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     register,
     login,
     logout,
+    deleteAccount,
     loading
   };
-
+  
   return (
     <AuthContext.Provider value={value}>
       {!loading && children}

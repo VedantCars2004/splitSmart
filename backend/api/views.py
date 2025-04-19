@@ -15,11 +15,39 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django.db.models import Q
+from .models import Group, GroupMember
+from .serializers import GroupSerializer
+
 class GroupViewSet(viewsets.ModelViewSet):
     serializer_class = GroupSerializer
     permission_classes = [permissions.IsAuthenticated]
     
+    def get_queryset(self):
+        """Return only groups that the current user is a member of"""
+        return Group.objects.filter(members=self.request.user)
+    
+    def perform_create(self, serializer):
+        """Set the current user as the created_by field and add them as a member"""
+        group = serializer.save(created_by=self.request.user)
+        # Add the creator as a member and admin
+        GroupMember.objects.create(
+            group=group,
+            user=self.request.user,
+            is_admin=True
+        )
+        
+    def create(self, request, *args, **kwargs):
+        """Override create to add debug logging"""
+        print("Create group request received:", request.data)
+        print("Request user:", request.user)
+        return super().create(request, *args, **kwargs)
+    
     def get_object(self):
+        """Get a specific group and verify the user has permission"""
         queryset = self.filter_queryset(self.get_queryset())
         lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
         lookup_value = self.kwargs[lookup_url_kwarg]
@@ -27,11 +55,9 @@ class GroupViewSet(viewsets.ModelViewSet):
         self.check_object_permissions(self.request, obj)
         return obj
     
-    def get_queryset(self):
-        return Group.objects.filter(members=self.request.user)
-    
     @action(detail=True, methods=['post'])
     def leave_group(self, request, pk=None):
+        """Allow a user to leave a group"""
         group = self.get_object()
         user = request.user
         try:
@@ -43,13 +69,15 @@ class GroupViewSet(viewsets.ModelViewSet):
             return Response({'status': 'you have left the group'})
         except GroupMember.DoesNotExist:
             return Response({'error': 'You are not a member of this group'}, 
-                            status=status.HTTP_400_BAD_REQUEST)
+                          status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=True, methods=['post'])
     def add_member(self, request, pk=None):
+        """Add a new member to the group by email"""
         group = self.get_object()
         email = request.data.get('email')
         
+        from django.contrib.auth.models import User
         try:
             user = User.objects.get(email=email)
             # Check if user is already a member
@@ -63,12 +91,12 @@ class GroupViewSet(viewsets.ModelViewSet):
     
     def perform_destroy(self, instance):
         """Delete group and all related balances"""
+        from .models import Balance
         # Delete all balances for this group
         Balance.objects.filter(group=instance).delete()
         # Then delete the group (will cascade delete instances, items, etc.)
         instance.delete()
-
-
+    
 class InstanceViewSet(viewsets.ModelViewSet):
     serializer_class = InstanceSerializer
     permission_classes = [permissions.IsAuthenticated]

@@ -3,7 +3,8 @@ import {
   Typography, Button, Card, CardContent, CardActions, 
   Grid, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, CircularProgress, MenuItem, Select, InputLabel,
-  FormControl, Box, OutlinedInput, Chip, IconButton
+  FormControl, Box, OutlinedInput, Chip, IconButton,
+  DialogContentText
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -66,6 +67,10 @@ const InstanceList: React.FC = () => {
   // State for edit item dialog
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [editItem, setEditItem] = useState<EditItemState | null>(null);
+
+  // State for delete instance confirmation dialog
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [instanceToDelete, setInstanceToDelete] = useState<Instance | null>(null);
 
   // Fetch instance list and groups on mount.
   useEffect(() => {
@@ -240,6 +245,31 @@ const InstanceList: React.FC = () => {
     }
   };
 
+  // --- Delete Instance Handlers ---
+  const handleOpenDeleteDialog = (instance: Instance) => {
+    setInstanceToDelete(instance);
+    setOpenDeleteDialog(true);
+  };
+
+  const handleCloseDeleteDialog = () => {
+    setOpenDeleteDialog(false);
+    setInstanceToDelete(null);
+  };
+
+  const handleDeleteInstance = async () => {
+    if (!instanceToDelete) return;
+    
+    try {
+      await instanceApi.deleteInstance(instanceToDelete.id.toString());
+      handleCloseDeleteDialog();
+      // Refresh the instances list
+      fetchData();
+    } catch (error) {
+      console.error('Failed to delete instance:', error);
+      setError('Failed to delete instance');
+    }
+  };
+
   // Helper function to refresh instance details
   const refreshInstanceDetails = async (instanceId: number) => {
     try {
@@ -294,6 +324,14 @@ const InstanceList: React.FC = () => {
                 <CardActions>
                   <Button size="small" onClick={() => handleOpenDetailsDialog(instance)}>
                     View Details
+                  </Button>
+                  <Button 
+                    size="small" 
+                    color="error" 
+                    startIcon={<DeleteIcon />}
+                    onClick={() => handleOpenDeleteDialog(instance)}
+                  >
+                    Delete
                   </Button>
                 </CardActions>
               </Card>
@@ -511,6 +549,26 @@ const InstanceList: React.FC = () => {
         <DialogActions>
           <Button onClick={handleCloseEditDialog}>Cancel</Button>
           <Button onClick={handleUpdateItem} variant="contained">Update Item</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Instance Confirmation Dialog */}
+      <Dialog
+        open={openDeleteDialog}
+        onClose={handleCloseDeleteDialog}
+      >
+        <DialogTitle>Confirm Deletion</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete the shopping trip "{instanceToDelete?.name}"? 
+            This will permanently remove all items and related balances within this trip.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDeleteDialog}>Cancel</Button>
+          <Button onClick={handleDeleteInstance} color="error" variant="contained">
+            Delete
+          </Button>
         </DialogActions>
       </Dialog>
     </div>
