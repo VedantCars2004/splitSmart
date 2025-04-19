@@ -3,7 +3,7 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.contrib.auth.models import User
-from django.db.models import Sum, Q
+from django.db.models import Sum, Q, Count
 from .models import Group, GroupMember, Instance, Item, ItemSplit, Balance
 from .serializers import (
     UserSerializer, GroupSerializer, InstanceSerializer,
@@ -60,6 +60,13 @@ class GroupViewSet(viewsets.ModelViewSet):
             return Response({'status': 'member added'})
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    def perform_destroy(self, instance):
+        """Delete group and all related balances"""
+        # Delete all balances for this group
+        Balance.objects.filter(group=instance).delete()
+        # Then delete the group (will cascade delete instances, items, etc.)
+        instance.delete()
 
 
 class InstanceViewSet(viewsets.ModelViewSet):
@@ -71,6 +78,19 @@ class InstanceViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+    
+    def perform_destroy(self, instance):
+        """Handle balance cleanup when an instance is deleted"""
+        group = instance.group
+        # Delete the instance first (this will cascade delete all items)
+        instance.delete()
+        
+        # Check if group has any remaining items
+        item_count = Item.objects.filter(instance__group=group).count()
+        if item_count == 0:
+            # No items left in the group, clean up all balances
+            deleted_count = Balance.objects.filter(group=group).delete()[0]
+            print(f"Cleaned up {deleted_count} balances for group {group.name} as it has no items")
 
 
 class ItemViewSet(viewsets.ModelViewSet):
@@ -195,6 +215,75 @@ class ItemViewSet(viewsets.ModelViewSet):
                         balance.save()
                     
                     print(f"Updated balance: {user.username} owes {payer.username} ${balance.amount}")
+    
+    def perform_destroy(self, instance):
+        """Handle balance adjustments when an item is deleted"""
+        # Get all the splits for this item
+        splits = ItemSplit.objects.filter(item=instance)
+        payer = instance.created_by
+        group = instance.instance.group
+        
+        print(f"Deleting item: {instance.name}, adjusting balances")
+        
+        # Adjust balances for each split
+        for split in splits:
+            user = split.user
+            split_amount = split.amount
+            
+            if user != payer:
+                # First try to find direct balance where user owes payer
+                balance = Balance.objects.filter(
+                    group=group,
+                    from_user=user,
+                    to_user=payer
+                ).first()
+                
+                if balance:
+                    # Reduce the balance
+                    balance.amount -= split_amount
+                    if balance.amount <= 0.001:  # Handle floating point precision
+                        balance.delete()
+                        print(f"Deleted balance: {user.username} no longer owes {payer.username}")
+                    else:
+                        balance.save()
+                        print(f"Reduced balance: {user.username} now owes {payer.username} ${balance.amount}")
+                else:
+                    # If no direct balance found, we need to increase the opposite balance
+                    opposite_balance = Balance.objects.filter(
+                        group=group,
+                        from_user=payer,
+                        to_user=user
+                    ).first()
+                    
+                    if opposite_balance:
+                        opposite_balance.amount += split_amount
+                        opposite_balance.save()
+                        print(f"Increased opposite balance: {payer.username} now owes {user.username} ${opposite_balance.amount}")
+                    else:
+                        # Create new balance in opposite direction
+                        Balance.objects.create(
+                            group=group,
+                            from_user=payer,
+                            to_user=user,
+                            amount=split_amount
+                        )
+                        print(f"Created new balance: {payer.username} now owes {user.username} ${split_amount}")
+        
+        # Now actually delete the item
+        instance.delete()
+        
+        # Check if this group has any remaining items
+        self._clean_up_balances(group)
+    
+    def _clean_up_balances(self, group):
+        """Clean up balances if no items exist in the group"""
+        # Count items in this group across all instances
+        item_count = Item.objects.filter(instance__group=group).count()
+        
+        if item_count == 0:
+            # No items left in the group, clean up all balances
+            deleted_count = Balance.objects.filter(group=group).delete()[0]
+            print(f"Cleaned up {deleted_count} balances for group {group.name} as it has no items")
 
 
 class BalanceViewSet(viewsets.ReadOnlyModelViewSet):
