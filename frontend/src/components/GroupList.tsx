@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Typography, Button, Card, CardContent, CardActions, 
+import {
+  Typography, Button, Card, CardContent, CardActions,
   Grid, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, CircularProgress, Box
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import { motion } from 'framer-motion';
 import { groupApi } from '../services/api';
 
 interface Group {
@@ -15,285 +16,193 @@ interface Group {
   members: any[];
 }
 
+const cardVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0 },
+  hover:   { scale: 1.03 },
+};
+
 const GroupList: React.FC = () => {
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  
-  // State for creating new groups
-  const [openCreateDialog, setOpenCreateDialog] = useState(false);
-  const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupDescription, setNewGroupDescription] = useState('');
+  const [error, setError]     = useState('');
 
-  // State for inviting a member to a group
-  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
+  // Dialog state
+  const [openCreate, setOpenCreate]           = useState(false);
+  const [newName, setNewName]                 = useState('');
+  const [newDesc, setNewDesc]                 = useState('');
+  const [inviteOpen, setInviteOpen]           = useState(false);
+  const [inviteEmail, setInviteEmail]         = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
+  const [detailsOpen, setDetailsOpen]         = useState(false);
+  const [selectedGroup, setSelectedGroup]     = useState<Group | null>(null);
 
-  // State for viewing details
-  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
-
-  useEffect(() => {
-    fetchGroups();
-  }, []);
+  useEffect(() => { fetchGroups(); }, []);
 
   const fetchGroups = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await groupApi.getGroups();
-      setGroups(response.data);
-    } catch (error: any) {
-      console.error('Failed to fetch groups:', error);
-      setError('Failed to fetch groups');
+      const res = await groupApi.getGroups();
+      setGroups(res.data);
+    } catch {
+      setError('Unable to load groups');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLeaveGroup = async (groupId: number) => {
+  const handleInvite    = async () => {
+    if (!inviteEmail.trim() || selectedGroupId === null) return setError('Enter a valid email');
     try {
-      await groupApi.leaveGroup(groupId.toString());
-      fetchGroups(); // Refresh the list
-    } catch (error: any) {
-      console.error('Failed to leave group:', error);
-      setError('Failed to leave group');
-    }
-  };
-
-  // New Group Modal Handlers
-  const handleOpenCreateDialog = () => {
-    setOpenCreateDialog(true);
-  };
-
-  const handleCloseCreateDialog = () => {
-    setOpenCreateDialog(false);
-    setNewGroupName('');
-    setNewGroupDescription('');
-  };
-
-  const handleCreateGroup = async () => {
-    try {
-      await groupApi.createGroup({
-        name: newGroupName,
-        description: newGroupDescription
-      });
-      handleCloseCreateDialog();
-      fetchGroups();
-    } catch (error: any) {
-      console.error('Failed to create group:', error);
-      setError('Failed to create group');
-    }
-  };
-
-  // Remove Group Handler
-  const handleRemoveGroup = async (groupId: number) => {
-    try {
-      await groupApi.deleteGroup(groupId.toString());
-      fetchGroups();
-    } catch (error: any) {
-      console.error('Failed to remove group:', error);
-      setError('Failed to remove group');
-    }
-  };
-
-  // Invite Member Modal Handlers (Invite by email)
-  const handleOpenInviteDialog = (groupId: number) => {
-    setSelectedGroupId(groupId);
-    setInviteDialogOpen(true);
-  };
-
-  const handleCloseInviteDialog = () => {
-    setInviteDialogOpen(false);
-    setInviteEmail('');
-    setSelectedGroupId(null);
-  };
-
-  const handleInviteMember = async () => {
-    if (selectedGroupId === null) return;
-    if (!inviteEmail.trim()) {
-      setError('Please enter a valid email address.');
-      return;
-    }
-    try {
-      console.log(`Inviting ${inviteEmail} to group ${selectedGroupId}`);
       await groupApi.addMember(selectedGroupId.toString(), inviteEmail);
-      handleCloseInviteDialog();
+      setInviteOpen(false); setInviteEmail('');
       fetchGroups();
-    } catch (error: any) {
-      console.error('Failed to invite member:', error);
-      if (error.response) {
-        console.error("Response data:", error.response.data);
-        console.error("Response status:", error.response.status);
-      } else {
-        console.error("Error message:", error.message);
-      }
-      setError('Failed to invite member');
+    } catch {
+      setError('Invite failed');
     }
   };
 
-  // View Details Handlers
-  const handleOpenDetailsDialog = (group: Group) => {
-    setSelectedGroup(group);
-    setDetailsDialogOpen(true);
+  const handleCreate    = async () => {
+    if (!newName.trim()) return setError('Name cannot be empty');
+    try {
+      await groupApi.createGroup({ name: newName, description: newDesc });
+      setOpenCreate(false); setNewName(''); setNewDesc('');
+      fetchGroups();
+    } catch {
+      setError('Create failed');
+    }
   };
 
-  const handleCloseDetailsDialog = () => {
-    setDetailsDialogOpen(false);
-    setSelectedGroup(null);
-  };
+  const handleRemove    = async (id: number) => { await groupApi.deleteGroup(id.toString()); fetchGroups(); };
+  const handleLeave     = async (id: number) => { await groupApi.leaveGroup(id.toString()); fetchGroups(); };
+  const openInviteDiag  = (id: number) => { setSelectedGroupId(id); setInviteOpen(true); };
+  const openDetailsDiag = (g: Group)  => { setSelectedGroup(g); setDetailsOpen(true); };
 
-  if (loading) {
-    return <CircularProgress />;
-  }
-
-  if (error) {
-    return <Typography color="error">{error}</Typography>;
-  }
+  if (loading) return <Box textAlign="center"><CircularProgress /></Box>;
+  if (error)   return <Typography color="error">{error}</Typography>;
 
   return (
-    <div>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Box>
+      {/* Header */}
+      <Box display="flex" alignItems="center" justifyContent="space-between" mb={4}>
         <Typography variant="h4">My Groups</Typography>
-        <Button 
-          variant="contained" 
+        <Button
+          variant="contained"
           startIcon={<AddIcon />}
-          onClick={handleOpenCreateDialog}
-        >
-          New Group
-        </Button>
+          onClick={() => setOpenCreate(true)}
+        >New Group</Button>
       </Box>
 
+      {/* Empty State */}
       {groups.length === 0 ? (
         <Typography>You haven't created any groups yet.</Typography>
       ) : (
-        <Grid container spacing={3}>
-          {groups.map((group) => (
-            <Grid key={group.id}>
-              <Card>
-                <CardContent>
-                  <Typography variant="h5" component="div">
-                    {group.name}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {group.description}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Members: {group.members.length}
-                  </Typography>
-                </CardContent>
-                <CardActions>
-                  <Button size="small" onClick={() => handleOpenDetailsDialog(group)}>
-                    View Details
-                  </Button>
-                  <Button 
-                    size="small" 
-                    color="error"
-                    onClick={() => handleRemoveGroup(group.id)}
-                  >
-                    Remove
-                  </Button>
-                  <Button 
-                    size="small"
-                    onClick={() => handleOpenInviteDialog(group.id)}
-                  >
-                    Invite
-                  </Button>
-                  <Button 
-                  size="small"
-                  color="secondary"
-                  onClick={() => handleLeaveGroup(group.id)}>
-                  Leave Group
-                  </Button>
-                </CardActions>
-              </Card>
+        <Grid container spacing={4}>
+          {groups.map((g, i) => (
+            <Grid key={g.id}>
+              <motion.div
+                variants={cardVariants}
+                initial="hidden"
+                animate="visible"
+                whileHover="hover"
+                transition={{ duration: 0.3, delay: i * 0.1 }}
+              >
+                <Card>
+                  <CardContent>
+                    <Typography variant="h5">{g.name}</Typography>
+                    <Typography variant="body2" sx={{ mt: 1, mb: 2 }}>
+                      {g.description || 'No description provided.'}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Created: {new Date(g.created_at).toLocaleDateString()}
+                    </Typography>
+                    <Typography variant="subtitle2" sx={{ mt: 1 }}>
+                      👥 {g.members.length} member{g.members.length !== 1 && 's'}
+                    </Typography>
+                  </CardContent>
+                  <CardActions sx={{ justifyContent: 'flex-start', px: 2, pb: 2 }}>
+                    {/* 1. Invite */}
+                    <Button size="small" variant="contained" onClick={() => openInviteDiag(g.id)}>
+                      Invite
+                    </Button>
+                    {/* 2. View */}
+                    <Button size="small" onClick={() => openDetailsDiag(g)}>
+                      View Details
+                    </Button>
+                    {/* 3. Leave */}
+                    <Button size="small" color="secondary" onClick={() => handleLeave(g.id)}>
+                      Leave
+                    </Button>
+                    {/* 4. Remove */}
+                    <Button size="small" color="error" onClick={() => handleRemove(g.id)}>
+                      Remove
+                    </Button>
+                  </CardActions>
+                </Card>
+              </motion.div>
             </Grid>
           ))}
         </Grid>
       )}
 
-      {/* Create Group Dialog */}
-      <Dialog open={openCreateDialog} onClose={handleCloseCreateDialog}>
+      {/* ——— Create Group ——— */}
+      <Dialog open={openCreate} onClose={() => setOpenCreate(false)}>
         <DialogTitle>Create New Group</DialogTitle>
         <DialogContent>
           <TextField
-            autoFocus
-            margin="dense"
-            id="name"
-            label="Group Name"
-            type="text"
-            fullWidth
-            variant="outlined"
-            value={newGroupName}
-            onChange={(e) => setNewGroupName(e.target.value)}
+            autoFocus margin="dense" label="Group Name" fullWidth
+            value={newName} onChange={e => setNewName(e.target.value)}
           />
           <TextField
-            margin="dense"
-            id="description"
-            label="Description"
-            type="text"
-            fullWidth
-            variant="outlined"
-            multiline
-            rows={3}
-            value={newGroupDescription}
-            onChange={(e) => setNewGroupDescription(e.target.value)}
+            margin="dense" label="Description" fullWidth multiline rows={3}
+            value={newDesc} onChange={e => setNewDesc(e.target.value)}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseCreateDialog}>Cancel</Button>
-          <Button onClick={handleCreateGroup} variant="contained">Create</Button>
+          <Button onClick={() => setOpenCreate(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleCreate}>Create</Button>
         </DialogActions>
       </Dialog>
 
-      {/* Invite Member Dialog */}
-      <Dialog open={inviteDialogOpen} onClose={handleCloseInviteDialog}>
+      {/* ——— Invite Member ——— */}
+      <Dialog open={inviteOpen} onClose={() => setInviteOpen(false)}>
         <DialogTitle>Invite Member</DialogTitle>
         <DialogContent>
           <TextField
-            autoFocus
-            margin="dense"
-            id="inviteEmail"
-            label="Member Email"
-            type="email"
-            fullWidth
-            variant="outlined"
-            value={inviteEmail}
-            onChange={(e) => setInviteEmail(e.target.value)}
+            autoFocus margin="dense" label="Email" type="email" fullWidth
+            value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseInviteDialog}>Cancel</Button>
-          <Button onClick={handleInviteMember} variant="contained">Invite</Button>
+          <Button onClick={() => setInviteOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleInvite}>Invite</Button>
         </DialogActions>
       </Dialog>
 
-      {/* Group Details Dialog */}
-      <Dialog open={detailsDialogOpen} onClose={handleCloseDetailsDialog}>
+      {/* ——— Group Details ——— */}
+      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)}>
         <DialogTitle>Group Details</DialogTitle>
         <DialogContent>
           {selectedGroup && (
             <Box>
-              <Typography variant="h5" component="div">
-                {selectedGroup.name}
+              <Typography variant="h5">{selectedGroup.name}</Typography>
+              <Typography variant="body1" sx={{ mt: 1 }}>
+                {selectedGroup.description || 'No description.'}
               </Typography>
-              <Typography variant="body1">
-                {selectedGroup.description}
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+                Created on {new Date(selectedGroup.created_at).toLocaleString()}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Created At: {selectedGroup.created_at}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Members: {selectedGroup.members.length}
+              <Typography variant="subtitle2" sx={{ mt: 2 }}>
+                👥 Members ({selectedGroup.members.length})
               </Typography>
             </Box>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDetailsDialog}>Close</Button>
+          <Button onClick={() => setDetailsOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </Box>
   );
 };
 

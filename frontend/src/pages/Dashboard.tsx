@@ -17,6 +17,7 @@ import GroupList from '../components/GroupList';
 import InstanceList from '../components/InstanceList';
 import BalanceList from '../components/BalanceList';
 import ListItemButton from '@mui/material/ListItemButton';
+import theme from '../theme';
 
 interface TabPanelProps {
   children?: React.ReactNode;

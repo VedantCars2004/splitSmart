@@ -131,54 +131,63 @@ class ItemViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         instance_id = self.request.data.get('instance')
         instance = Instance.objects.get(id=instance_id)
-        
-        # Debug info
+
         print(f"Creating item by user: {self.request.user.username}, email: {self.request.user.email}")
-        
+
         item = serializer.save(created_by=self.request.user, instance=instance)
-        
-        # Create item splits based on shared_with users
+
         shared_with_ids = self.request.data.get('shared_with', [])
         print(f"Shared with IDs: {shared_with_ids}")
-        
-        if shared_with_ids:
-            # Ensure we can handle both username and ID lookup
-            users = []
-            for id_or_username in shared_with_ids:
-                # First try to find by ID
-                user = User.objects.filter(id=id_or_username).first()
-                if not user:
-                    # Then try to find by username (which might be email)
-                    user = User.objects.filter(username=id_or_username).first()
-                if not user:
-                    # Finally try by email
-                    user = User.objects.filter(email=id_or_username).first()
-                    
-                if user and user not in users:
-                    users.append(user)
-            
-            # Print found users for debugging
-            for user in users:
-                print(f"Found user to share with: id={user.id}, username={user.username}, email={user.email}")
-            
-            # If no users found, log this for debugging
-            if not users:
-                print(f"No users found for IDs/usernames: {shared_with_ids}")
-                return
-                
-            # Include payer in the count - they already paid
-            split_amount = item.price / len(users)
-            
-            for user in users:
-                ItemSplit.objects.create(
-                    item=item,
-                    user=user,
-                    amount=split_amount
-                )
-                
-            # Update balances
-            self._update_balances(item, users, split_amount)
-    
+
+        if not shared_with_ids:
+            print("No users shared with — skipping split creation")
+            return
+
+        # Resolve users
+        users = []
+        for id_or_username in shared_with_ids:
+            user = (
+                User.objects.filter(id=id_or_username).first() or
+                User.objects.filter(username=id_or_username).first() or
+                User.objects.filter(email=id_or_username).first()
+            )
+            if user and user not in users:
+                users.append(user)
+
+        for user in users:
+            print(f"Found user to share with: id={user.id}, username={user.username}, email={user.email}")
+
+        if not users:
+            print(f"No users found for IDs/usernames: {shared_with_ids}")
+            return
+
+        payer = item.created_by
+
+        # If the payer is not in the split, treat it as a gift and skip balances
+        if payer not in users:
+            print("Payer is not part of the shared_with list — skipping balance creation")
+            return
+
+        split_amount = item.price / len(users)
+
+        # Create item splits
+        for user in users:
+            ItemSplit.objects.create(
+                item=item,
+                user=user,
+                amount=split_amount
+            )
+
+        # Exclude payer from balance calculations (they already paid)
+        users_to_bill = [u for u in users if u != payer]
+
+        if not users_to_bill:
+            print("Only payer is included — no one owes money")
+            return
+
+        # Update balances for other users
+        self._update_balances(item, users_to_bill, split_amount)
+
     def _update_balances(self, item, users, split_amount):
         payer = item.created_by
         instance = item.instance

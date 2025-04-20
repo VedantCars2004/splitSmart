@@ -9,6 +9,9 @@ import {
 } from 'firebase/auth';
 import { auth } from '../firebase';
 
+
+
+
 interface AuthContextType {
   currentUser: FirebaseUser | null;
   register: (email: string, password: string) => Promise<UserCredential>;

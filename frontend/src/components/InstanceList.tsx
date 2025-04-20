@@ -422,7 +422,7 @@ const InstanceList: React.FC = () => {
                     <Box>
                       <Typography variant="subtitle1">{item.name} - ${item.price}</Typography>
                       <Typography variant="body2">
-                        Shared With: {item.shared_with && item.shared_with.map((u: any) => u.user.username).join(', ')}
+                        Sharing Members: {item.shared_with && item.shared_with.map((u: any) => u.user.username).join(', ')}
                       </Typography>
                     </Box>
                     <Box>
